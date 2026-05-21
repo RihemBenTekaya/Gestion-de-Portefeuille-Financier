@@ -1,0 +1,148 @@
+@page "/transactions/new"
+@page "/transactions/edit/{Id:int}"
+@rendermode InteractiveServer
+@using DashboardData.Models
+@using DashboardData.Services
+@inject IPortfolioService PortfolioService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(Id.HasValue ? "Edit Transaction" : "New Transaction")</PageTitle>
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">@(Id.HasValue ? "Edit Transaction" : "Record Transaction")</h1>
+        <p class="text-muted mb-0">Use this form for buy and sell operations.</p>
+    </div>
+    <a href="/dashboard" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Dashboard</a>
+</div>
+
+@if (NotFound)
+{
+    <div class="alert alert-warning">
+        The transaction was not found. Return to the dashboard and choose an existing transaction.
+    </div>
+}
+else if (CurrentTransaction == null)
+{
+    <p><em>Loading form...</em></p>
+}
+else if (!AssetOptions.Any())
+{
+    <div class="alert alert-warning">Create at least one asset before adding a transaction.</div>
+    <a href="/assets/new" class="btn btn-success">Add Asset</a>
+}
+else
+{
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <EditForm Model="CurrentTransaction" OnValidSubmit="HandleValidSubmit" FormName="TransactionEditForm">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="text-danger" />
+                <input type="hidden" name="CurrentTransaction.Id" value="@CurrentTransaction.Id" />
+
+                <div class="row g-3">
+                    <div class="col-lg-6">
+                        <label class="form-label">Asset</label>
+                        <InputSelect @bind-Value="CurrentTransaction.AssetId" class="form-select">
+                            <option value="0">-- Select asset --</option>
+                            @foreach (var asset in AssetOptions)
+                            {
+                                <option value="@asset.Id">@asset.Symbol - @asset.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => CurrentTransaction.AssetId)" class="text-danger" />
+                    </div>
+                    <div class="col-lg-6">
+                        <label class="form-label">Operation</label>
+                        <InputSelect @bind-Value="CurrentTransaction.OperationType" class="form-select">
+                            <option value="Buy">Buy</option>
+                            <option value="Sell">Sell</option>
+                        </InputSelect>
+                        <ValidationMessage For="@(() => CurrentTransaction.OperationType)" class="text-danger" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Quantity</label>
+                        <InputNumber @bind-Value="CurrentTransaction.Quantity" class="form-control" />
+                        <ValidationMessage For="@(() => CurrentTransaction.Quantity)" class="text-danger" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Unit price</label>
+                        <InputNumber @bind-Value="CurrentTransaction.UnitPrice" class="form-control" />
+                        <ValidationMessage For="@(() => CurrentTransaction.UnitPrice)" class="text-danger" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Fees</label>
+                        <InputNumber @bind-Value="CurrentTransaction.Fees" class="form-control" />
+                        <ValidationMessage For="@(() => CurrentTransaction.Fees)" class="text-danger" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Operation date</label>
+                        <InputDate @bind-Value="CurrentTransaction.OperationDate" class="form-control" />
+                        <ValidationMessage For="@(() => CurrentTransaction.OperationDate)" class="text-danger" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Note</label>
+                        <InputText @bind-Value="CurrentTransaction.Note" class="form-control" placeholder="Optional note" />
+                        <ValidationMessage For="@(() => CurrentTransaction.Note)" class="text-danger" />
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex gap-2 flex-wrap">
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle"></i> Save Transaction</button>
+                    <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int? Id { get; set; }
+
+    [SupplyParameterFromForm]
+    private PortfolioTransaction CurrentTransaction { get; set; }
+    private List<Asset> AssetOptions = new();
+    private bool NotFound;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AssetOptions = await PortfolioService.GetAssetsAsync();
+
+        if (Id.HasValue && CurrentTransaction == null)
+        {
+            CurrentTransaction = await PortfolioService.GetTransactionByIdAsync(Id.Value);
+            if (CurrentTransaction == null)
+            {
+                NotFound = true;
+                return;
+            }
+        }
+        else if (CurrentTransaction == null)
+        {
+            CurrentTransaction = new PortfolioTransaction
+            {
+                OperationType = "Buy",
+                OperationDate = DateTime.Today,
+                Quantity = 1,
+                UnitPrice = 1,
+                Fees = 0
+            };
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (Id.HasValue)
+        {
+            CurrentTransaction.Id = Id.Value;
+            await PortfolioService.UpdateTransactionAsync(CurrentTransaction);
+        }
+        else
+        {
+            await PortfolioService.AddTransactionAsync(CurrentTransaction);
+        }
+
+        NavigationManager.NavigateTo("/dashboard");
+    }
+}

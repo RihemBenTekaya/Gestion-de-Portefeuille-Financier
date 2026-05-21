@@ -1,0 +1,32 @@
+<div class="card text-white @BackgroundColorClass h-100 shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h6 class="card-title mb-1">@Title</h6>
+                <h3 class="my-2">@Value</h3>
+                @if (!string.IsNullOrWhiteSpace(Subtitle))
+                {
+                    <small class="opacity-75">@Subtitle</small>
+                }
+            </div>
+            <i class="bi @IconClass" style="font-size: 2.5rem; opacity: 0.5;"></i>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "KPI Title";
+
+    [Parameter]
+    public string Value { get; set; } = "0";
+
+    [Parameter]
+    public string Subtitle { get; set; } = "";
+
+    [Parameter]
+    public string BackgroundColorClass { get; set; } = "bg-success";
+
+    [Parameter]
+    public string IconClass { get; set; } = "bi-graph-up";
+}

@@ -1,0 +1,70 @@
+@page "/budgets"
+@rendermode InteractiveServer
+@using DashboardData.Models
+@using DashboardData.Services
+@inject IPortfolioService PortfolioService
+
+<PageTitle>Budgets</PageTitle>
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-4">
+    <div>
+        <h1 class="mb-1">Investment Budgets</h1>
+        <p class="text-muted mb-0">Create and manage the budget lines used by the dashboard.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="/dashboard" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Dashboard</a>
+        <a href="/budgets/new" class="btn btn-success"><i class="bi bi-plus-circle"></i> New Budget</a>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(StatusMessage))
+{
+    <div class="alert alert-success"><i class="bi bi-info-circle"></i> @StatusMessage</div>
+}
+
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <KpiCard Title="Total Budget" Value="@FormatMoney(TotalBudget)" Subtitle="Investment envelope" BackgroundColorClass="bg-success" IconClass="bi-piggy-bank" />
+    </div>
+    <div class="col-md-6 mb-3">
+        <KpiCard Title="Budget Lines" Value="@BudgetItems.Count.ToString()" Subtitle="Rows stored in SQLite" BackgroundColorClass="bg-secondary" IconClass="bi-card-checklist" />
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-table text-success"></i> Budget List</h5>
+    </div>
+    <div class="card-body">
+        <BudgetTable Budgets="BudgetItems" OnDeleteClicked="DeleteBudget" />
+    </div>
+</div>
+
+@code {
+    private List<InvestmentBudget> BudgetItems = new();
+    private decimal TotalBudget;
+    private string StatusMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBudgets();
+    }
+
+    private async Task LoadBudgets()
+    {
+        BudgetItems = await PortfolioService.GetBudgetsAsync();
+        TotalBudget = await PortfolioService.GetBudgetTotalAsync();
+    }
+
+    private async Task DeleteBudget(int id)
+    {
+        await PortfolioService.DeleteBudgetAsync(id);
+        StatusMessage = "Budget deleted.";
+        await LoadBudgets();
+    }
+
+    private string FormatMoney(decimal value)
+    {
+        return $"${value:0.00}";
+    }
+}

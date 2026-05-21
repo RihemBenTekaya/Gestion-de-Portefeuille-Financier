@@ -1,0 +1,121 @@
+@page "/assets/new"
+@page "/assets/edit/{Id:int}"
+@rendermode InteractiveServer
+@using DashboardData.Models
+@using DashboardData.Services
+@inject IPortfolioService PortfolioService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(Id.HasValue ? "Edit Asset" : "New Asset")</PageTitle>
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">@(Id.HasValue ? "Edit Asset" : "Add New Asset")</h1>
+        <p class="text-muted mb-0">Assets are the stocks, crypto currencies, ETFs or cash positions you follow.</p>
+    </div>
+    <a href="/dashboard" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Dashboard</a>
+</div>
+
+@if (NotFound)
+{
+    <div class="alert alert-warning">
+        The asset was not found. Return to the dashboard and choose an existing asset.
+    </div>
+}
+else if (CurrentAsset == null)
+{
+    <p><em>Loading form...</em></p>
+}
+else
+{
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <EditForm Model="CurrentAsset" OnValidSubmit="HandleValidSubmit" FormName="AssetEditForm">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="text-danger" />
+                <input type="hidden" name="CurrentAsset.Id" value="@CurrentAsset.Id" />
+
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label">Asset name</label>
+                        <InputText @bind-Value="CurrentAsset.Name" class="form-control" placeholder="Example: Apple Inc." />
+                        <ValidationMessage For="@(() => CurrentAsset.Name)" class="text-danger" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Symbol</label>
+                        <InputText @bind-Value="CurrentAsset.Symbol" class="form-control" placeholder="Example: AAPL" />
+                        <ValidationMessage For="@(() => CurrentAsset.Symbol)" class="text-danger" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Type</label>
+                        <InputSelect @bind-Value="CurrentAsset.Type" class="form-select">
+                            @foreach (var type in AssetTypes)
+                            {
+                                <option value="@type">@type</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => CurrentAsset.Type)" class="text-danger" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Current price</label>
+                        <InputNumber @bind-Value="CurrentAsset.CurrentPrice" class="form-control" />
+                        <ValidationMessage For="@(() => CurrentAsset.CurrentPrice)" class="text-danger" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Notes</label>
+                        <InputTextArea @bind-Value="CurrentAsset.Notes" class="form-control" rows="3" placeholder="Optional note" />
+                        <ValidationMessage For="@(() => CurrentAsset.Notes)" class="text-danger" />
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex gap-2 flex-wrap">
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle"></i> Save Asset</button>
+                    <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly string[] AssetTypes = { "Stock", "Crypto", "ETF", "Bond", "Cash" };
+
+    [Parameter]
+    public int? Id { get; set; }
+
+    [SupplyParameterFromForm]
+    private Asset CurrentAsset { get; set; }
+    private bool NotFound;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Id.HasValue && CurrentAsset == null)
+        {
+            CurrentAsset = await PortfolioService.GetAssetByIdAsync(Id.Value);
+            if (CurrentAsset == null)
+            {
+                NotFound = true;
+                return;
+            }
+        }
+        else if (CurrentAsset == null)
+        {
+            CurrentAsset = new Asset { Type = "Stock", CurrentPrice = 1 };
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (Id.HasValue)
+        {
+            CurrentAsset.Id = Id.Value;
+            await PortfolioService.UpdateAssetAsync(CurrentAsset);
+        }
+        else
+        {
+            await PortfolioService.AddAssetAsync(CurrentAsset);
+        }
+
+        NavigationManager.NavigateTo("/dashboard");
+    }
+}

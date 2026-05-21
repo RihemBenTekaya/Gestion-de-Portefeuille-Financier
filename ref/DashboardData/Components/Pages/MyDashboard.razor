@@ -1,0 +1,270 @@
+@page "/dashboard"
+@page "/"
+@rendermode InteractiveServer
+@using DashboardData.Models
+@using DashboardData.Services
+@inject IPortfolioService PortfolioService
+
+<PageTitle>Portfolio Dashboard</PageTitle>
+
+<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+    <div>
+        <h1 class="mb-1">Investment Portfolio Dashboard</h1>
+        <p class="text-muted mb-0">Manage assets, buy/sell transactions, budgets and analytical indicators.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-success" href="/assets/new"><i class="bi bi-plus-circle"></i> New Asset</a>
+        <a class="btn btn-outline-success" href="/transactions/new"><i class="bi bi-arrow-left-right"></i> New Transaction</a>
+        <a class="btn btn-outline-secondary" href="/budgets"><i class="bi bi-piggy-bank"></i> Budgets</a>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(StatusMessage))
+{
+    <div class="alert @StatusMessageClass" role="alert">
+        <i class="bi bi-info-circle"></i> @StatusMessage
+    </div>
+}
+
+<div class="row mb-4">
+    <div class="col-md-6 col-xl-3 mb-3">
+        <KpiCard Title="Portfolio Value" Value="@FormatMoney(PortfolioValue)" Subtitle="Current market value" BackgroundColorClass="bg-success" IconClass="bi-wallet2" />
+    </div>
+    <div class="col-md-6 col-xl-3 mb-3">
+        <KpiCard Title="Gain / Loss" Value="@FormatMoney(GlobalGainLoss)" Subtitle="Value - invested" BackgroundColorClass="@(GlobalGainLoss >= 0 ? "bg-primary" : "bg-danger")" IconClass="bi-graph-up-arrow" />
+    </div>
+    <div class="col-md-6 col-xl-3 mb-3">
+        <KpiCard Title="Net Invested" Value="@FormatMoney(InvestedAmount)" Subtitle="Buys minus sells" BackgroundColorClass="bg-info" IconClass="bi-cash-stack" />
+    </div>
+    <div class="col-md-6 col-xl-3 mb-3">
+        <KpiCard Title="Assets" Value="@AssetCount.ToString()" Subtitle="Tracked instruments" BackgroundColorClass="bg-secondary" IconClass="bi-boxes" />
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex flex-column flex-md-row justify-content-between gap-2">
+        <div>
+            <h5 class="mb-0"><i class="bi bi-piggy-bank text-success"></i> Investment Budget</h5>
+            <small class="text-muted">Shows how much of the budget is represented by the current portfolio value.</small>
+        </div>
+        <a href="/budgets" class="btn btn-sm btn-outline-success align-self-md-center">Manage Budget</a>
+    </div>
+    <div class="card-body">
+        <div class="d-flex justify-content-between mb-2">
+            <strong>@FormatMoney(PortfolioValue) used</strong>
+            <span class="text-muted">Budget: @FormatMoney(BudgetTotal)</span>
+        </div>
+        <div class="progress" role="progressbar" aria-label="Budget usage" style="height: 1rem;">
+            <div class="progress-bar bg-success" style="@BudgetProgressStyle"></div>
+        </div>
+        <small class="text-muted">@BudgetUsagePercent.ToString("0.0")% used</small>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-xl-8 mb-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-bar-chart-fill text-success"></i> Performance by Asset</h5>
+            </div>
+            <div class="card-body">
+                @if (PerformanceStats.Any())
+                {
+                    <RadzenChart>
+                        <RadzenColumnSeries Data="@PerformanceStats" CategoryProperty="AssetSymbol" ValueProperty="GainLoss" Title="Gain / Loss" Fill="#198754" />
+                        <RadzenValueAxis Formatter="@((value) => FormatMoney(Convert.ToDecimal(value)))" />
+                        <RadzenLegend Visible="false" />
+                    </RadzenChart>
+                }
+                else
+                {
+                    <p class="text-muted mb-0">Add transactions to see performance.</p>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4 mb-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-pie-chart-fill text-success"></i> Allocation by Type</h5>
+                @if (!string.IsNullOrEmpty(SelectedTypeFilter))
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ClearTypeFilter">Clear</button>
+                }
+            </div>
+            <div class="card-body">
+                @if (AllocationStats.Any())
+                {
+                    <RadzenChart SeriesClick="@OnAllocationClick">
+                        <RadzenDonutSeries Data="@AllocationStats" CategoryProperty="AssetType" ValueProperty="CurrentValue">
+                            <TitleTemplate>
+                                <div class="rz-donut-content">
+                                    <div>Total</div>
+                                    <div>@FormatMoney(PortfolioValue)</div>
+                                </div>
+                            </TitleTemplate>
+                        </RadzenDonutSeries>
+                        <RadzenLegend Position="LegendPosition.Right" />
+                    </RadzenChart>
+                }
+                else
+                {
+                    <p class="text-muted mb-0">Add transactions to see allocation.</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-white">
+        <div class="d-flex flex-column flex-xl-row justify-content-between gap-3">
+            <div>
+                <h5 class="mb-1"><i class="bi bi-list-check text-success"></i> @(ShowAssets ? "Assets" : "Transaction History")</h5>
+                <small class="text-muted">Use search and type filters to find records quickly.</small>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="/assets/new" class="btn btn-sm btn-success"><i class="bi bi-plus-lg"></i> Add Asset</a>
+                <a href="/transactions/new" class="btn btn-sm btn-outline-success"><i class="bi bi-arrow-left-right"></i> Add Transaction</a>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row g-2 align-items-center mb-3">
+            <div class="col-lg-5">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search by asset name or symbol" @bind="SearchText" @bind:event="oninput" />
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <select class="form-select" value="@SelectedTypeFilter" @onchange="OnTypeChanged">
+                    <option value="">All types</option>
+                    @foreach (var type in AssetTypes)
+                    {
+                        <option value="@type">@type</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-6 col-lg-4 text-lg-end">
+                <div class="btn-group" role="group" aria-label="View selector">
+                    <button class="btn @(ShowAssets ? "btn-success" : "btn-outline-success")" @onclick="() => ShowAssets = true">Assets</button>
+                    <button class="btn @(!ShowAssets ? "btn-success" : "btn-outline-success")" @onclick="() => ShowAssets = false">History</button>
+                </div>
+            </div>
+        </div>
+
+        @if (ShowAssets)
+        {
+            <AssetTable AssetItems="AssetRows" PerformanceStats="PerformanceStats" OnDeleteClicked="DeleteAsset" />
+        }
+        else
+        {
+            <TransactionTable Transactions="Transactions" OnDeleteClicked="DeleteTransaction" />
+        }
+    </div>
+</div>
+
+@code {
+    private readonly string[] AssetTypes = { "Stock", "Crypto", "ETF", "Bond", "Cash" };
+
+    private List<Asset> AssetRows = new();
+    private List<PortfolioTransaction> Transactions = new();
+    private List<AssetPerformanceStat> PerformanceStats = new();
+    private List<AssetAllocationStat> AllocationStats = new();
+
+    private int AssetCount;
+    private decimal BudgetTotal;
+    private decimal PortfolioValue;
+    private decimal InvestedAmount;
+    private decimal GlobalGainLoss;
+    private bool ShowAssets = true;
+    private string SelectedTypeFilter;
+    private string _searchText = "";
+    private string StatusMessage;
+    private string StatusMessageClass = "alert-success";
+
+    private string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            _searchText = value;
+            _ = ExecuteSearch();
+        }
+    }
+
+    private decimal BudgetUsagePercent => BudgetTotal == 0 ? 0 : (PortfolioValue / BudgetTotal) * 100;
+    private decimal BudgetUsageWidth => BudgetUsagePercent > 100 ? 100 : BudgetUsagePercent;
+    private string BudgetProgressStyle => $"width: {BudgetUsageWidth:0}%";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboard();
+    }
+
+    private async Task LoadDashboard()
+    {
+        PerformanceStats = await PortfolioService.GetPerformanceByAssetAsync();
+        AllocationStats = await PortfolioService.GetAllocationByTypeAsync();
+        AssetCount = await PortfolioService.GetAssetCountAsync();
+        BudgetTotal = await PortfolioService.GetBudgetTotalAsync();
+        PortfolioValue = PerformanceStats.Sum(s => s.CurrentValue);
+        InvestedAmount = PerformanceStats.Sum(s => s.InvestedAmount);
+        GlobalGainLoss = PerformanceStats.Sum(s => s.GainLoss);
+
+        await ExecuteSearch();
+    }
+
+    private async Task ExecuteSearch()
+    {
+        AssetRows = await PortfolioService.SearchAssetsAsync(SelectedTypeFilter, SearchText);
+        Transactions = await PortfolioService.SearchTransactionsAsync(SelectedTypeFilter, SearchText);
+        StateHasChanged();
+    }
+
+    private async Task OnTypeChanged(ChangeEventArgs args)
+    {
+        SelectedTypeFilter = args.Value?.ToString();
+        if (string.IsNullOrEmpty(SelectedTypeFilter))
+        {
+            SelectedTypeFilter = null;
+        }
+
+        await ExecuteSearch();
+    }
+
+    private async Task OnAllocationClick(SeriesClickEventArgs args)
+    {
+        string clickedType = args.Category.ToString();
+        SelectedTypeFilter = SelectedTypeFilter == clickedType ? null : clickedType;
+        await ExecuteSearch();
+    }
+
+    private async Task ClearTypeFilter()
+    {
+        SelectedTypeFilter = null;
+        await ExecuteSearch();
+    }
+
+    private async Task DeleteAsset(int id)
+    {
+        await PortfolioService.DeleteAssetAsync(id);
+        StatusMessage = "Asset deleted. Its transactions were also removed.";
+        StatusMessageClass = "alert-success";
+        await LoadDashboard();
+    }
+
+    private async Task DeleteTransaction(int id)
+    {
+        await PortfolioService.DeleteTransactionAsync(id);
+        StatusMessage = "Transaction deleted and indicators refreshed.";
+        StatusMessageClass = "alert-success";
+        await LoadDashboard();
+    }
+
+    private string FormatMoney(decimal value)
+    {
+        return $"{value:0.00} TND";
+    }
+}
