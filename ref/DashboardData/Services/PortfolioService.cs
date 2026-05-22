@@ -1,21 +1,34 @@
 using DashboardData.Data;
 using DashboardData.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Components.Authorization;
+using System.Security.Claims;
 
 namespace DashboardData.Services;
 
 public class PortfolioService : IPortfolioService
 {
     private readonly AppDbContext _dbContext;
+    private readonly AuthenticationStateProvider _authStateProvider;
 
-    public PortfolioService(AppDbContext dbContext)
+    public PortfolioService(AppDbContext dbContext, AuthenticationStateProvider authStateProvider)
     {
         _dbContext = dbContext;
+        _authStateProvider = authStateProvider;
+    }
+
+    private async Task<string> GetCurrentUserIdAsync()
+    {
+        var authState = await _authStateProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return userId ?? "";
     }
 
     public async Task<List<Asset>> GetAssetsAsync()
     {
+        var userId = await GetCurrentUserIdAsync();
         return await _dbContext.Assets
+            .Where(a => a.UserId == userId)
             .OrderBy(a => a.Type)
             .ThenBy(a => a.Symbol)
             .ToListAsync();
@@ -23,7 +36,8 @@ public class PortfolioService : IPortfolioService
 
     public async Task<List<Asset>> SearchAssetsAsync(string assetType, string searchText)
     {
-        IQueryable<Asset> query = _dbContext.Assets.AsQueryable();
+        var userId = await GetCurrentUserIdAsync();
+        IQueryable<Asset> query = _dbContext.Assets.Where(a => a.UserId == userId);
 
         if (!string.IsNullOrEmpty(assetType))
         {
@@ -43,11 +57,14 @@ public class PortfolioService : IPortfolioService
 
     public async Task<Asset> GetAssetByIdAsync(int id)
     {
-        return await _dbContext.Assets.FindAsync(id);
+        var userId = await GetCurrentUserIdAsync();
+        return await _dbContext.Assets.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
     }
 
     public async Task AddAssetAsync(Asset asset)
     {
+        var userId = await GetCurrentUserIdAsync();
+        asset.UserId = userId;
         asset.LastUpdate = DateTime.Now;
         _dbContext.Assets.Add(asset);
         await _dbContext.SaveChangesAsync();
@@ -55,14 +72,24 @@ public class PortfolioService : IPortfolioService
 
     public async Task UpdateAssetAsync(Asset asset)
     {
-        asset.LastUpdate = DateTime.Now;
-        _dbContext.Assets.Update(asset);
-        await _dbContext.SaveChangesAsync();
+        var userId = await GetCurrentUserIdAsync();
+        var existingAsset = await _dbContext.Assets.FirstOrDefaultAsync(a => a.Id == asset.Id && a.UserId == userId);
+        if (existingAsset != null)
+        {
+            existingAsset.Name = asset.Name;
+            existingAsset.Symbol = asset.Symbol;
+            existingAsset.Type = asset.Type;
+            existingAsset.CurrentPrice = asset.CurrentPrice;
+            existingAsset.Notes = asset.Notes;
+            existingAsset.LastUpdate = DateTime.Now;
+            await _dbContext.SaveChangesAsync();
+        }
     }
 
     public async Task DeleteAssetAsync(int id)
     {
-        var asset = await _dbContext.Assets.FindAsync(id);
+        var userId = await GetCurrentUserIdAsync();
+        var asset = await _dbContext.Assets.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
         if (asset != null)
         {
             _dbContext.Assets.Remove(asset);
@@ -72,17 +99,20 @@ public class PortfolioService : IPortfolioService
 
     public async Task<List<PortfolioTransaction>> GetTransactionsAsync()
     {
+        var userId = await GetCurrentUserIdAsync();
         return await _dbContext.PortfolioTransactions
             .Include(t => t.Asset)
+            .Where(t => t.Asset.UserId == userId)
             .OrderByDescending(t => t.OperationDate)
             .ToListAsync();
     }
 
     public async Task<List<PortfolioTransaction>> SearchTransactionsAsync(string assetType, string searchText)
     {
+        var userId = await GetCurrentUserIdAsync();
         IQueryable<PortfolioTransaction> query = _dbContext.PortfolioTransactions
             .Include(t => t.Asset)
-            .AsQueryable();
+            .Where(t => t.Asset.UserId == userId);
 
         if (!string.IsNullOrEmpty(assetType))
         {
@@ -101,7 +131,10 @@ public class PortfolioService : IPortfolioService
 
     public async Task<PortfolioTransaction> GetTransactionByIdAsync(int id)
     {
-        return await _dbContext.PortfolioTransactions.FindAsync(id);
+        var userId = await GetCurrentUserIdAsync();
+        return await _dbContext.PortfolioTransactions
+            .Include(t => t.Asset)
+            .FirstOrDefaultAsync(t => t.Id == id && t.Asset.UserId == userId);
     }
 
     public async Task AddTransactionAsync(PortfolioTransaction transaction)
@@ -112,13 +145,31 @@ public class PortfolioService : IPortfolioService
 
     public async Task UpdateTransactionAsync(PortfolioTransaction transaction)
     {
-        _dbContext.PortfolioTransactions.Update(transaction);
-        await _dbContext.SaveChangesAsync();
+        var userId = await GetCurrentUserIdAsync();
+        var existingTransaction = await _dbContext.PortfolioTransactions
+            .Include(t => t.Asset)
+            .FirstOrDefaultAsync(t => t.Id == transaction.Id && t.Asset.UserId == userId);
+        
+        if (existingTransaction != null)
+        {
+            existingTransaction.AssetId = transaction.AssetId;
+            existingTransaction.OperationType = transaction.OperationType;
+            existingTransaction.Quantity = transaction.Quantity;
+            existingTransaction.UnitPrice = transaction.UnitPrice;
+            existingTransaction.Fees = transaction.Fees;
+            existingTransaction.OperationDate = transaction.OperationDate;
+            existingTransaction.Note = transaction.Note;
+            await _dbContext.SaveChangesAsync();
+        }
     }
 
     public async Task DeleteTransactionAsync(int id)
     {
-        var transaction = await _dbContext.PortfolioTransactions.FindAsync(id);
+        var userId = await GetCurrentUserIdAsync();
+        var transaction = await _dbContext.PortfolioTransactions
+            .Include(t => t.Asset)
+            .FirstOrDefaultAsync(t => t.Id == id && t.Asset.UserId == userId);
+        
         if (transaction != null)
         {
             _dbContext.PortfolioTransactions.Remove(transaction);
@@ -128,31 +179,47 @@ public class PortfolioService : IPortfolioService
 
     public async Task<List<InvestmentBudget>> GetBudgetsAsync()
     {
+        var userId = await GetCurrentUserIdAsync();
         return await _dbContext.InvestmentBudgets
+            .Where(b => b.UserId == userId)
             .OrderByDescending(b => b.StartDate)
             .ToListAsync();
     }
 
     public async Task<InvestmentBudget> GetBudgetByIdAsync(int id)
     {
-        return await _dbContext.InvestmentBudgets.FindAsync(id);
+        var userId = await GetCurrentUserIdAsync();
+        return await _dbContext.InvestmentBudgets.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
     }
 
     public async Task AddBudgetAsync(InvestmentBudget budget)
     {
+        var userId = await GetCurrentUserIdAsync();
+        budget.UserId = userId;
         _dbContext.InvestmentBudgets.Add(budget);
         await _dbContext.SaveChangesAsync();
     }
 
     public async Task UpdateBudgetAsync(InvestmentBudget budget)
     {
-        _dbContext.InvestmentBudgets.Update(budget);
-        await _dbContext.SaveChangesAsync();
+        var userId = await GetCurrentUserIdAsync();
+        var existingBudget = await _dbContext.InvestmentBudgets.FirstOrDefaultAsync(b => b.Id == budget.Id && b.UserId == userId);
+        
+        if (existingBudget != null)
+        {
+            existingBudget.Label = budget.Label;
+            existingBudget.Amount = budget.Amount;
+            existingBudget.StartDate = budget.StartDate;
+            existingBudget.Notes = budget.Notes;
+            await _dbContext.SaveChangesAsync();
+        }
     }
 
     public async Task DeleteBudgetAsync(int id)
     {
-        var budget = await _dbContext.InvestmentBudgets.FindAsync(id);
+        var userId = await GetCurrentUserIdAsync();
+        var budget = await _dbContext.InvestmentBudgets.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        
         if (budget != null)
         {
             _dbContext.InvestmentBudgets.Remove(budget);
@@ -162,13 +229,15 @@ public class PortfolioService : IPortfolioService
 
     public async Task<int> GetAssetCountAsync()
     {
-        return await _dbContext.Assets.CountAsync();
+        var userId = await GetCurrentUserIdAsync();
+        return await _dbContext.Assets.CountAsync(a => a.UserId == userId);
     }
 
     public async Task<decimal> GetBudgetTotalAsync()
     {
-        if (!await _dbContext.InvestmentBudgets.AnyAsync()) return 0;
-        return await _dbContext.InvestmentBudgets.SumAsync(b => b.Amount);
+        var userId = await GetCurrentUserIdAsync();
+        if (!await _dbContext.InvestmentBudgets.AnyAsync(b => b.UserId == userId)) return 0;
+        return await _dbContext.InvestmentBudgets.Where(b => b.UserId == userId).SumAsync(b => b.Amount);
     }
 
     public async Task<decimal> GetInvestedAmountAsync()
@@ -191,8 +260,10 @@ public class PortfolioService : IPortfolioService
 
     public async Task<List<AssetPerformanceStat>> GetPerformanceByAssetAsync()
     {
+        var userId = await GetCurrentUserIdAsync();
         var transactions = await _dbContext.PortfolioTransactions
             .Include(t => t.Asset)
+            .Where(t => t.Asset.UserId == userId)
             .ToListAsync();
 
         return transactions

@@ -1,10 +1,13 @@
 @page "/assets/new"
 @page "/assets/edit/{Id:int}"
+@attribute [Authorize]
 @rendermode InteractiveServer
 @using DashboardData.Models
 @using DashboardData.Services
+@using Microsoft.AspNetCore.Components.Authorization
 @inject IPortfolioService PortfolioService
 @inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>@(Id.HasValue ? "Edit Asset" : "New Asset")</PageTitle>
 
@@ -89,6 +92,11 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Get current user ID first
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
         if (Id.HasValue && CurrentAsset == null)
         {
             CurrentAsset = await PortfolioService.GetAssetByIdAsync(Id.Value);
@@ -100,22 +108,38 @@ else
         }
         else if (CurrentAsset == null)
         {
-            CurrentAsset = new Asset { Type = "Stock", CurrentPrice = 1 };
+            CurrentAsset = new Asset 
+            { 
+                Type = "Stock", 
+                CurrentPrice = 1,
+                UserId = userId ?? "" // Set UserId immediately
+            };
         }
     }
 
     private async Task HandleValidSubmit()
     {
-        if (Id.HasValue)
+        // Get current user ID
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        
+        if (user.Identity?.IsAuthenticated == true)
         {
-            CurrentAsset.Id = Id.Value;
-            await PortfolioService.UpdateAssetAsync(CurrentAsset);
-        }
-        else
-        {
-            await PortfolioService.AddAssetAsync(CurrentAsset);
-        }
+            var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            
+            if (Id.HasValue)
+            {
+                CurrentAsset.Id = Id.Value;
+                CurrentAsset.UserId = userId; // Ensure UserId is set
+                await PortfolioService.UpdateAssetAsync(CurrentAsset);
+            }
+            else
+            {
+                CurrentAsset.UserId = userId; // Set UserId for new asset
+                await PortfolioService.AddAssetAsync(CurrentAsset);
+            }
 
-        NavigationManager.NavigateTo("/dashboard");
+            NavigationManager.NavigateTo("/dashboard");
+        }
     }
 }

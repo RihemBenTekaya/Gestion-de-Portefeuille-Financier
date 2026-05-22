@@ -28,5 +28,31 @@
                 <span class="bi bi-piggy-bank" aria-hidden="true"></span> Budgets
             </NavLink>
         </div>
+
+        <hr class="my-3" />
+
+        <AuthorizeView>
+            <Authorized>
+                <div class="nav-item px-3">
+                    <div class="nav-link text-white">
+                        <span class="bi bi-person-circle" aria-hidden="true"></span> @context.User.Identity?.Name
+                    </div>
+                </div>
+                <div class="nav-item px-3">
+                    <form method="post" action="/api/auth/logout" data-enhance="false">
+                        <button type="submit" class="btn btn-link nav-link text-start w-100 border-0">
+                            <span class="bi bi-box-arrow-right" aria-hidden="true"></span> Logout
+                        </button>
+                    </form>
+                </div>
+            </Authorized>
+            <NotAuthorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/login">
+                        <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Login
+                    </NavLink>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
     </nav>
 </div>

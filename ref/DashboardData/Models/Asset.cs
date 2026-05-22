@@ -7,6 +7,11 @@ public class Asset
     [Key]
     public int Id { get; set; }
 
+    [Required]
+    public string UserId { get; set; } = "";
+
+    public ApplicationUser User { get; set; }
+
     [Required(ErrorMessage = "Asset name is required.")]
     [StringLength(80, MinimumLength = 2, ErrorMessage = "Asset name must be between 2 and 80 characters.")]
     public string Name { get; set; } = "";

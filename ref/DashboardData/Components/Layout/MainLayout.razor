@@ -1,24 +1,42 @@
 ﻿@inherits LayoutComponentBase
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
-
-    <main>
-        <div class="top-row px-4">
-            <div>
-                <strong>Green Portfolio</strong>
-                <span class="text-muted ms-2 d-none d-md-inline">Blazor + EF Core investment tracker</span>
+<AuthorizeView>
+    <Authorized>
+        <div class="page">
+            <div class="sidebar">
+                <NavMenu />
             </div>
-            <a href="/transactions/new" class="btn btn-sm btn-success">New Transaction</a>
-        </div>
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+            <main>
+                <div class="top-row px-4">
+                    <div>
+                        <strong>Green Portfolio</strong>
+                        <span class="text-muted ms-2 d-none d-md-inline">Blazor + EF Core investment tracker</span>
+                    </div>
+                    <div>
+                        <span class="me-3">👤 @context.User.Identity?.Name</span>
+                        <form method="post" action="/api/auth/logout" data-enhance="false" class="d-inline">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Déconnexion</button>
+                        </form>
+                    </div>
+                </div>
+
+                <article class="content px-4">
+                    @Body
+                </article>
+            </main>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="page">
+            <main style="width: 100%;">
+                <article class="content px-4">
+                    @Body
+                </article>
+            </main>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.

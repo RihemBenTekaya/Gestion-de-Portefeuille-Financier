@@ -1,10 +1,13 @@
 @page "/budgets/new"
 @page "/budgets/edit/{Id:int}"
+@attribute [Authorize]
 @rendermode InteractiveServer
 @using DashboardData.Models
 @using DashboardData.Services
+@using Microsoft.AspNetCore.Components.Authorization
 @inject IPortfolioService PortfolioService
 @inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>@(Id.HasValue ? "Edit Budget" : "New Budget")</PageTitle>
 
@@ -77,6 +80,11 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Get current user ID first
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
         if (Id.HasValue && CurrentBudget == null)
         {
             CurrentBudget = await PortfolioService.GetBudgetByIdAsync(Id.Value);
@@ -92,23 +100,35 @@ else
             {
                 Label = "Investment Budget",
                 Amount = 1000,
-                StartDate = DateTime.Today
+                StartDate = DateTime.Today,
+                UserId = userId ?? "" // Set UserId immediately
             };
         }
     }
 
     private async Task HandleValidSubmit()
     {
-        if (Id.HasValue)
+        // Get current user ID
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        
+        if (user.Identity?.IsAuthenticated == true)
         {
-            CurrentBudget.Id = Id.Value;
-            await PortfolioService.UpdateBudgetAsync(CurrentBudget);
-        }
-        else
-        {
-            await PortfolioService.AddBudgetAsync(CurrentBudget);
-        }
+            var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            
+            if (Id.HasValue)
+            {
+                CurrentBudget.Id = Id.Value;
+                CurrentBudget.UserId = userId; // Ensure UserId is set
+                await PortfolioService.UpdateBudgetAsync(CurrentBudget);
+            }
+            else
+            {
+                CurrentBudget.UserId = userId; // Set UserId for new budget
+                await PortfolioService.AddBudgetAsync(CurrentBudget);
+            }
 
-        NavigationManager.NavigateTo("/budgets");
+            NavigationManager.NavigateTo("/budgets");
+        }
     }
 }
