@@ -123,6 +123,50 @@ app.UseAuthorization();
 app.MapStaticAssets();
 
 // --- ENDPOINTS D'AUTHENTIFICATION (Hors WebSocket) ---
+app.MapPost("/api/auth/register", async (
+    [FromServices] UserManager<ApplicationUser> userManager,
+    [FromServices] SignInManager<ApplicationUser> signInManager,
+    [FromForm] string fullName,
+    [FromForm] string email,
+    [FromForm] string password,
+    [FromForm] string confirmPassword) =>
+{
+    // Validate passwords match
+    if (password != confirmPassword)
+    {
+        return Results.Redirect("/register?error=Les+mots+de+passe+ne+correspondent+pas");
+    }
+
+    // Check if user already exists
+    var existingUser = await userManager.FindByEmailAsync(email);
+    if (existingUser != null)
+    {
+        return Results.Redirect("/register?error=Cet+email+est+déjà+utilisé");
+    }
+
+    // Create new user
+    var newUser = new ApplicationUser
+    {
+        UserName = email,
+        Email = email,
+        FullName = fullName,
+        RegistrationDate = DateTime.Now
+    };
+
+    var result = await userManager.CreateAsync(newUser, password);
+    
+    if (result.Succeeded)
+    {
+        // Automatically sign in the new user
+        await signInManager.SignInAsync(newUser, isPersistent: false);
+        return Results.Redirect("/dashboard");
+    }
+
+    // If creation failed, return error
+    var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+    return Results.Redirect($"/register?error={Uri.EscapeDataString(errors)}");
+}).DisableAntiforgery();
+
 app.MapPost("/api/auth/login", async (
     [FromServices] SignInManager<ApplicationUser> signInManager,
     [FromForm] string email, 
